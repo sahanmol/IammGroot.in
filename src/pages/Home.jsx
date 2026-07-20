@@ -1,299 +1,282 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Settings, BarChart2, ShieldCheck, Cpu, Globe, Users, TrendingUp, Sparkles, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
+import { ArrowRight, Sparkles, AlertCircle, BookOpen } from 'lucide-react';
+import api from '../utils/api.js';
+import ArticleCard from '../components/ArticleCard.jsx';
+import { CardSkeleton } from '../components/Loader.jsx';
+import SponsoredBadge from '../components/SponsoredBadge.jsx';
 
 export const Home = () => {
-  const navigate = useNavigate();
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  // Interactive consultation tool state
-  const [selectedIndustry, setSelectedIndustry] = useState('');
-  const [selectedService, setSelectedService] = useState('');
-  const [suggestion, setSuggestion] = useState('');
+  // Spotlight and Hero article states
+  const [heroArticle, setHeroArticle] = useState(null);
+  const [spotlightArticle, setSpotlightArticle] = useState(null);
 
-  const handleScopeGenerate = () => {
-    if (!selectedIndustry || !selectedService) {
-      setSuggestion('Please select both an industry and a service focus.');
-      return;
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [category, setCategory] = useState('all');
+
+  const fetchHomeContent = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Fetch spotlight (latest sponsored article)
+      const spotlightRes = await api.get('/articles?category=sponsored&limit=1');
+      if (spotlightRes.data.articles && spotlightRes.data.articles.length > 0) {
+        setSpotlightArticle(spotlightRes.data.articles[0]);
+      } else {
+        // Fallback: search for any sponsored article
+        const fallbackSpotlight = await api.get('/articles?limit=20');
+        const found = fallbackSpotlight.data.articles.find(a => a.isSponsored);
+        if (found) setSpotlightArticle(found);
+      }
+
+      // 2. Fetch main grid articles (includes pagination and category filter)
+      const gridRes = await api.get(`/articles?category=${category}&page=${page}&limit=6`);
+      const list = gridRes.data.articles || [];
+      setArticles(list);
+      setTotalPages(gridRes.data.totalPages || 1);
+
+      // 3. Set the latest non-sponsored article as the hero if on page 1 and category is 'all'
+      if (page === 1 && category === 'all' && list.length > 0) {
+        // Find first non-sponsored post for Hero
+        const nonSponsored = list.find(a => !a.isSponsored);
+        if (nonSponsored) {
+          setHeroArticle(nonSponsored);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load homepage content:', err);
+      setError('Could not connect to the database. Please check if the backend server is running.');
+    } finally {
+      setLoading(false);
     }
-
-    const scopes = {
-      'environmental': {
-        'strategy': 'Recommended Focus: Core ESG modeling and environmental EIA compliance strategy. We will structure a detailed Environmental Management Plan (EMP) aligned with India\'s 2070 Net-Zero strategy.',
-        'risk': 'Recommended Focus: Environmental Compliance Audits. Assessing project environmental impact risks and securing regulatory clearances from local & central environmental authorities.',
-        'digital': 'Recommended Focus: Green IoT & Monitoring. Implementing automated sensor networks to track emissions, water utilization, and waste outputs in real-time.',
-        'finance': 'Recommended Focus: Green Bond & Sustainable Finance Advisory. Securing environmental grants and evaluating CAPEX viability for sustainability transformations.'
-      },
-      'finance-corp': {
-        'strategy': 'Recommended Focus: Corporate Restructuring & Synergy. Realigning business departments for maximum profitability and capital allocations.',
-        'risk': 'Recommended Focus: Portfolio Risk Governance. Compliance audits matching RBI, SEBI, or global frameworks, checking wealth assets exposure.',
-        'digital': 'Recommended Focus: Modern Fintech Implementations. Cloud-based transaction ledgers, analytics engines, and customer engagement channels.',
-        'finance': 'Recommended Focus: Valuations & Capital Raise Support. Structuring M&As, IPO readiness plans, and debt restructuring packages.'
-      },
-      'infra-manufacturing': {
-        'strategy': 'Recommended Focus: Supply Chain Strategy & Site Optimization. Engineering lean pipelines and warehouse layout structures.',
-        'risk': 'Recommended Focus: Operational Safety & Quality Audits. Implementing Six Sigma standards and strict engineering hazard controls.',
-        'digital': 'Recommended Focus: Industry 4.0 Transformation. Smart factory components, robotics integration, and predictive machinery maintenance models.',
-        'finance': 'Recommended Focus: Project Management Cost Controls. Securing capital-intensive machinery funding and cost estimation matrices.'
-      }
-    };
-
-    const industryData = scopes[selectedIndustry];
-    const message = industryData ? industryData[selectedService] : 'Custom scoping recommended. Let us connect to discuss your project requirements.';
-    setSuggestion(message);
   };
 
-  const handleStartConsultation = () => {
-    // Navigate to contact page with prefilled state
-    navigate('/contact', {
-      state: {
-        subject: `Consultation: ${selectedIndustry} - ${selectedService}`,
-        message: `I generated a proposal suggestion using your Project Scope Starter: "${suggestion}". Let's arrange a call to discuss details.`
-      }
-    });
+  useEffect(() => {
+    fetchHomeContent();
+  }, [category, page]);
+
+  const handleCategoryChange = (catId) => {
+    setCategory(catId);
+    setPage(1); // reset to page 1 on category change
   };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
+      window.scrollTo({ top: 350, behavior: 'smooth' });
+    }
+  };
+
+  const categories = [
+    { id: 'all', label: 'All Updates' },
+    { id: 'tech-news', label: 'Tech News' },
+    { id: 'startups', label: 'Startups & VC' },
+    { id: 'coding', label: 'Coding' },
+    { id: 'ai', label: 'AI & Data' },
+  ];
 
   return (
-    <div className="home-container">
-      {/* Hero Section */}
-      <section className="hero-section-custom">
-        <div className="hero-content">
-          <div className="hero-badge">
-            <Globe size={14} className="gold-text" /> 
-            <span>PAN INDIA ENVIRONMENTAL & CORPORATE ADVISORY</span>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+      <Helmet>
+        <title>TechSpotlight | Latest Tech News & Sponsored Startup Insights</title>
+        <meta name="description" content="Read daily updates on startup news, engineering codebases, artificial intelligence breakthroughs, and Sunday Sponsored Spotlights featuring rising tech companies." />
+      </Helmet>
+
+      {/* Database Error Banner */}
+      {error && (
+        <div className="flex items-center gap-3 p-4 mb-8 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-700 dark:text-rose-400">
+          <AlertCircle size={20} className="shrink-0" />
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
+
+      {/* 1. Hero Section (Latest Non-sponsored Post) */}
+      {!loading && heroArticle && page === 1 && category === 'all' && (
+        <section className="mb-12">
+          <div className="relative rounded-3xl overflow-hidden border border-slate-200 dark:border-brand-darkBorder bg-slate-100 dark:bg-slate-900/50">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
+              {/* Hero Image */}
+              <div className="lg:col-span-7 aspect-[16/10] lg:aspect-auto lg:h-[450px]">
+                <img
+                  src={heroArticle.coverImage.startsWith('/uploads') ? `http://localhost:5000${heroArticle.coverImage}` : heroArticle.coverImage || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200'}
+                  alt={heroArticle.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Hero Content */}
+              <div className="lg:col-span-5 flex flex-col justify-center p-8 sm:p-10 bg-white dark:bg-brand-darkCard">
+                <div className="flex items-center gap-3 mb-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <span className="bg-brand-primary/10 text-brand-primary dark:text-indigo-400 px-2 py-0.5 rounded-md">
+                    Featured
+                  </span>
+                  <span>
+                    {new Date(heroArticle.publishDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight mb-4 hover:text-brand-primary transition-colors">
+                  <Link to={`/article/${heroArticle.slug}`}>{heroArticle.title}</Link>
+                </h1>
+
+                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base leading-relaxed mb-6 line-clamp-4">
+                  {heroArticle.excerpt}
+                </p>
+
+                <div className="flex items-center justify-between mt-auto pt-6 border-t border-slate-100 dark:border-slate-800/80">
+                  <div className="text-xs">
+                    <span className="block font-bold text-slate-900 dark:text-white">{heroArticle.author?.name || 'Staff Writer'}</span>
+                    <span className="text-slate-500">{heroArticle.readTime} min read</span>
+                  </div>
+                  <Link
+                    to={`/article/${heroArticle.slug}`}
+                    className="flex items-center gap-1 text-sm font-bold text-brand-primary hover:text-brand-primaryHover dark:text-indigo-400 transition-colors"
+                  >
+                    <span>Read Article</span>
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
-          <h1>
-            SATTVASHTHA Advisory <br />
-            Consultancy For Environmental <span className="gold-text-gradient">EIA/EMP Services</span>
-          </h1>
-          <p className="hero-subtitle">
-            Helping organizations transform 2070 strategy, operations, and technology for sustainable, long-term corporate growth.
-          </p>
-          <div className="hero-actions">
-            <Link to="/contact" className="btn btn-primary btn-large">
-              Get in Touch <ArrowRight size={18} />
-            </Link>
-            <Link to="/about" className="btn btn-secondary btn-large">
-              Read More
-            </Link>
+        </section>
+      )}
+
+      {/* 2. Sponsored Spotlight Section (Prominent Amber Spotlight) */}
+      {!loading && spotlightArticle && (
+        <section className="mb-12">
+          <div className="relative rounded-3xl p-6 sm:p-8 bg-amber-500/[0.04] dark:bg-amber-500/[0.02] border border-amber-500/20 shadow-md">
+            <div className="absolute top-0 right-0 transform translate-x-3 -translate-y-3 opacity-20 pointer-events-none">
+              <Sparkles size={120} className="text-amber-500" />
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-8 items-center">
+              {/* Spotlight Cover */}
+              <div className="w-full md:w-1/3 aspect-[4/3] rounded-2xl overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-900">
+                <img
+                  src={spotlightArticle.coverImage.startsWith('/uploads') ? `http://localhost:5000${spotlightArticle.coverImage}` : spotlightArticle.coverImage || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600'}
+                  alt={spotlightArticle.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Spotlight details */}
+              <div className="flex-grow">
+                <div className="mb-3">
+                  <SponsoredBadge sponsorName={spotlightArticle.sponsorName} />
+                </div>
+                
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
+                  <Link to={`/article/${spotlightArticle.slug}`}>{spotlightArticle.title}</Link>
+                </h2>
+                
+                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base leading-relaxed mt-2 mb-4 line-clamp-3">
+                  {spotlightArticle.excerpt}
+                </p>
+
+                <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    By {spotlightArticle.author?.name || 'Staff Editor'}
+                  </span>
+                  <span>•</span>
+                  <span>{spotlightArticle.readTime} min spotlight read</span>
+                  <Link
+                    to={`/article/${spotlightArticle.slug}`}
+                    className="ml-auto flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                  >
+                    <span>Analyze spotlight</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 3. Feeds & Categorization */}
+      <section className="mt-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-brand-darkBorder pb-4 mb-8 gap-4">
+          <div className="flex items-center gap-2">
+            <BookOpen size={20} className="text-brand-primary" />
+            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Latest Stories
+            </h2>
+          </div>
+
+          {/* Category Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategoryChange(cat.id)}
+                className={`text-xs px-3.5 py-2 rounded-lg font-bold tracking-wide transition-all whitespace-nowrap ${
+                  category === cat.id
+                    ? 'bg-brand-primary text-white shadow-md shadow-indigo-500/10'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
         </div>
-      </section>
 
-      {/* Expertise Grid */}
-      <section className="section-padding">
-        <div className="section-header">
-          <h2>Our Core Expertise</h2>
-          <p className="section-subtitle">Driving structural success and regulatory compliance across sectors</p>
-        </div>
-
-        <div className="expertise-grid-custom">
-          <div className="expertise-card card">
-            <div className="card-icon-container">
-              <BarChart2 size={24} />
-            </div>
-            <h3>Business Strategy Consulting</h3>
-            <p>Strategic modeling and management consulting solutions to streamline corporate performance, scale operations, and capture target market segments.</p>
-            <Link to="/solutions/artificial-intelligence" className="card-link">Learn more <ArrowRight size={14} /></Link>
+        {/* Article Grid / Skeletons */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <CardSkeleton key={i} />
+            ))}
           </div>
-
-          <div className="expertise-card card">
-            <div className="card-icon-container">
-              <ShieldCheck size={24} />
-            </div>
-            <h3>Risk & Compliance Advisory</h3>
-            <p>Helping organizations manage strict regulatory filings, health audits, and operational hazards, ensuring complete compliance with state and central laws.</p>
-            <Link to="/solutions/cybersecurity" className="card-link">Learn more <ArrowRight size={14} /></Link>
-          </div>
-
-          <div className="expertise-card card">
-            <div className="card-icon-container">
-              <Cpu size={24} />
-            </div>
-            <h3>Digital Transformation</h3>
-            <p>Deploying advanced technical architectures, analytics platforms, and intelligent automations to future-proof outdated business environments.</p>
-            <Link to="/solutions/cloud" className="card-link">Learn more <ArrowRight size={14} /></Link>
-          </div>
-
-          <div className="expertise-card card">
-            <div className="card-icon-container">
-              <Settings size={24} />
-            </div>
-            <h3>Financial Advisory</h3>
-            <p>Providing expert financial consulting, cost controls, valuation metrics, and project management budgeting to support high-impact expansions.</p>
-            <Link to="/solutions/customer-experience" className="card-link">Learn more <ArrowRight size={14} /></Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Interactive Project Scoper Section */}
-      <section className="section-padding interactive-section card">
-        <div className="interactive-grid">
-          <div className="interactive-text">
-            <div className="badge-glow"><Sparkles size={14} /> Interactive Tool</div>
-            <h2>Interactive Project Scope Starter</h2>
-            <p>
-              Select your industry sector and the service focus you need. Our engine will suggest an immediate high-level consulting roadmap for you.
+        ) : articles.length === 0 ? (
+          <div className="text-center py-16 rounded-3xl border border-dashed border-slate-200 dark:border-brand-darkBorder bg-slate-50/50 dark:bg-slate-900/10">
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
+              No articles found in this category. Check back later!
             </p>
-            
-            <div className="form-group-row" style={{ marginTop: '24px' }}>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label className="form-label">Select Industry Sector</label>
-                <select 
-                  className="input-text"
-                  value={selectedIndustry}
-                  onChange={(e) => { setSelectedIndustry(e.target.value); setSuggestion(''); }}
-                  style={{ background: 'var(--bg-dark)' }}
-                >
-                  <option value="">-- Select Sector --</option>
-                  <option value="environmental">Environmental Compliance / EIA / EMP</option>
-                  <option value="finance-corp">Banking, Wealth & Financial Corporate</option>
-                  <option value="infra-manufacturing">Infrastructure, Ports & Manufacturing</option>
-                </select>
-              </div>
-
-              <div className="form-group" style={{ flex: 1 }}>
-                <label className="form-label">Select Service Focus</label>
-                <select 
-                  className="input-text"
-                  value={selectedService}
-                  onChange={(e) => { setSelectedService(e.target.value); setSuggestion(''); }}
-                  style={{ background: 'var(--bg-dark)' }}
-                >
-                  <option value="">-- Select Service --</option>
-                  <option value="strategy">Corporate Strategy & ESG Plan</option>
-                  <option value="risk">Risk & Regulatory Audits</option>
-                  <option value="digital">Digital Transformation & IoT</option>
-                  <option value="finance">Capital Planning & PM Costing</option>
-                </select>
-              </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {articles.map((art) => (
+                <ArticleCard key={art._id} article={art} />
+              ))}
             </div>
 
-            <button 
-              className="btn btn-primary" 
-              onClick={handleScopeGenerate}
-              style={{ marginTop: '16px' }}
-            >
-              Analyze & Generate Scope
-            </button>
-          </div>
-
-          <div className="interactive-result">
-            {suggestion ? (
-              <div className="result-display fade-in">
-                <h4 style={{ color: 'var(--primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} /> Scope Outline Generated
-                </h4>
-                <p style={{ fontSize: '15px', lineHeight: '1.6', color: 'var(--text-primary)' }}>{suggestion}</p>
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={handleStartConsultation}
-                  style={{ marginTop: '20px', width: '100%', border: '1px solid var(--primary-glow)' }}
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-12">
+                <button
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1}
+                  className="px-4 py-2 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-brand-darkCard text-slate-700 dark:text-slate-300 disabled:opacity-40 transition-colors"
                 >
-                  Prefill & Contact Advisor
+                  Previous
+                </button>
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-bold px-4">
+                  Page {page} of {totalPages}
+                </div>
+                <button
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page === totalPages}
+                  className="px-4 py-2 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-brand-darkCard text-slate-700 dark:text-slate-300 disabled:opacity-40 transition-colors"
+                >
+                  Next
                 </button>
               </div>
-            ) : (
-              <div className="result-placeholder">
-                <AlertCircle size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                <p>Choose an industry and service on the left to output your project scope suggestion.</p>
-              </div>
             )}
-          </div>
-        </div>
-      </section>
-
-      {/* Industries Grid */}
-      <section className="section-padding">
-        <div className="section-header">
-          <h2>Industry Verticals</h2>
-          <p className="section-subtitle">Delivering bespoke solutions across global domains</p>
-        </div>
-
-        <div className="industry-cards-grid">
-          <Link to="/industries/banking-capital-markets" className="industry-card-custom card">
-            <span className="industry-num">01</span>
-            <h3>Financial Services</h3>
-            <p>Modernizing banking platforms, optimizing wealth assets risk, and advising capital market players.</p>
-          </Link>
-
-          <Link to="/industries/consumer-goods" className="industry-card-custom card">
-            <span className="industry-num">02</span>
-            <h3>Manufacturing</h3>
-            <p>Formulating Industry 4.0 automation, supply chain resilience models, and shopfloor efficiency audits.</p>
-          </Link>
-
-          <Link to="/industries/aerospace-defense" className="industry-card-custom card">
-            <span className="industry-num">03</span>
-            <h3>Aerospace & Defense</h3>
-            <p>Navigating defense procurement compliance, project management systems, and specialized engineering roadmaps.</p>
-          </Link>
-
-          <Link to="/industries/asset-wealth-management" className="industry-card-custom card">
-            <span className="industry-num">04</span>
-            <h3>Energy & Utilities</h3>
-            <p>Assisting renewable transitions, ecological EIA mappings, power infrastructure projects, and carbon accounting.</p>
-          </Link>
-        </div>
-      </section>
-
-      {/* Why Choose Us */}
-      <section className="section-padding bg-dark-tint" style={{ borderRadius: 'var(--radius-lg)', margin: '40px 0' }}>
-        <div className="section-header">
-          <h2>Why Choose Sattvashtha</h2>
-          <p className="section-subtitle">Delivering unparalleled advisory value to scale and protect your operations</p>
-        </div>
-
-        <div className="why-choose-grid">
-          <div className="why-item">
-            <div className="why-icon"><Users size={20} /></div>
-            <div>
-              <h4>Experienced Consultants</h4>
-              <p>Our team comprises senior engineers, environmental biologists, and certified financial consultants with decades of experience.</p>
-            </div>
-          </div>
-
-          <div className="why-item">
-            <div className="why-icon"><TrendingUp size={20} /></div>
-            <div>
-              <h4>Data-Driven Strategies</h4>
-              <p>We combine deep mathematical modeling and market metrics with field surveys to create plans that translate directly to growth.</p>
-            </div>
-          </div>
-
-          <div className="why-item">
-            <div className="why-icon"><Globe size={20} /></div>
-            <div>
-              <h4>Industry Expertise</h4>
-              <p>From complex regulatory compliance frameworks to high-tech AI deployments, we cover both traditional and advanced fields.</p>
-            </div>
-          </div>
-
-          <div className="why-item">
-            <div className="why-icon"><Users size={20} /></div>
-            <div>
-              <h4>Client-Centric Approach</h4>
-              <p>No generic solutions. Every project starts with diagnostic questions to build a roadmap customized for your local challenges.</p>
-            </div>
-          </div>
-
-          <div className="why-item">
-            <div className="why-icon"><Settings size={20} /></div>
-            <div>
-              <h4>Innovative Systems</h4>
-              <p>We deploy proprietary digital audit sheets and real-time client trackers, enhancing the transparency and speed of project delivery.</p>
-            </div>
-          </div>
-
-          <div className="why-item">
-            <div className="why-icon"><Sparkles size={20} /></div>
-            <div>
-              <h4>Project Value Management</h4>
-              <p>Cost-effective methodologies designed to optimize ROI, matching global benchmarks and securing fast statutory approvals.</p>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </section>
     </div>
   );
 };
+
 export default Home;
