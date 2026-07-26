@@ -1,50 +1,134 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider } from './context/AuthContext.jsx';
-import Navbar from './components/Navbar.jsx';
-import Footer from './components/Footer.jsx';
-import Home from './pages/Home.jsx';
-import ArticlePage from './pages/ArticlePage.jsx';
-import CategoryPage from './pages/CategoryPage.jsx';
-import AdminLogin from './pages/AdminLogin.jsx';
-import AdminDashboard from './pages/AdminDashboard.jsx';
-import AdminEditor from './pages/AdminEditor.jsx';
-import NotFound from './pages/NotFound.jsx';
+import React, { useState } from "react";
+import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import MenuSection from "./components/MenuSection";
+import CustomCakeBuilder from "./components/CustomCakeBuilder";
+import StorySection from "./components/StorySection";
+import ReviewsSection from "./components/ReviewsSection";
+import ContactFooter from "./components/ContactFooter";
+import CartDrawer from "./components/CartDrawer";
+import { CheckCircle2, X } from "lucide-react";
 
-function App() {
+export default function App() {
+  const [cartItems, setCartItems] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  // Add item to cart
+  const handleAddToCart = (product, quantity = 1, instructions = "") => {
+    setCartItems((prevItems) => {
+      const existingIndex = prevItems.findIndex(
+        (item) => item.id === product.id && item.instructions === instructions
+      );
+
+      if (existingIndex > -1) {
+        const updated = [...prevItems];
+        updated[existingIndex].quantity += quantity;
+        return updated;
+      } else {
+        return [
+          ...prevItems,
+          {
+            ...product,
+            quantity,
+            instructions: instructions || ""
+          }
+        ];
+      }
+    });
+
+    // Trigger floating notification toast
+    setToastMessage(`Added ${quantity}x ${product.name} to order!`);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  };
+
+  // Update item quantity
+  const handleUpdateQuantity = (itemId, newQty) => {
+    if (newQty <= 0) {
+      handleRemoveItem(itemId);
+      return;
+    }
+    setCartItems((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, quantity: newQty } : item))
+    );
+  };
+
+  // Remove item
+  const handleRemoveItem = (itemId) => {
+    setCartItems((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  // Clear cart
+  const handleClearCart = () => {
+    setCartItems([]);
+  };
+
+  // Smooth scroll helper
+  const scrollToSection = (id) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const totalCartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
-    <HelmetProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <div className="flex flex-col min-h-screen bg-brand-lightBg text-slate-900 dark:bg-brand-darkBg dark:text-slate-100 transition-colors duration-300">
-            {/* Navigation Header */}
-            <Navbar />
-            
-            {/* Main Page Content */}
-            <main className="flex-grow pb-16">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/article/:slug" element={<ArticlePage />} />
-                <Route path="/category/:category" element={<CategoryPage />} />
-                
-                {/* Admin Routes */}
-                <Route path="/admin" element={<AdminLogin />} />
-                <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                <Route path="/admin/editor" element={<AdminEditor />} />
-                
-                {/* 404 Fallback */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-            
-            {/* Portal Footer */}
-            <Footer />
-          </div>
-        </BrowserRouter>
-      </AuthProvider>
-    </HelmetProvider>
+    <div className="bakery-app-root">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="floating-toast animate-slideDown">
+          <CheckCircle2 size={18} className="toast-icon" />
+          <span>{toastMessage}</span>
+          <button 
+            onClick={() => setIsCartOpen(true)} 
+            className="toast-view-cart-btn"
+          >
+            View Cart ({totalCartCount})
+          </button>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <Navbar 
+        cartCount={totalCartCount} 
+        onOpenCart={() => setIsCartOpen(true)} 
+      />
+
+      {/* Main Page Sections */}
+      <main>
+        <Hero 
+          onExploreMenu={() => scrollToSection("menu")} 
+          onCustomCakeClick={() => scrollToSection("custom-cake")} 
+        />
+
+        <MenuSection 
+          onAddToCart={handleAddToCart} 
+        />
+
+        <CustomCakeBuilder 
+          onAddToCart={handleAddToCart} 
+        />
+
+        <StorySection />
+
+        <ReviewsSection />
+      </main>
+
+      {/* Footer */}
+      <ContactFooter />
+
+      {/* Shopping Cart Drawer */}
+      <CartDrawer 
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cartItems={cartItems}
+        onUpdateQuantity={handleUpdateQuantity}
+        onRemoveItem={handleRemoveItem}
+        onClearCart={handleClearCart}
+      />
+    </div>
   );
 }
-
-export default App;
